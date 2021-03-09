@@ -7,7 +7,7 @@ import * as iam from "@aws-cdk/aws-iam";
 import * as lambda from "@aws-cdk/aws-lambda";
 
 import { App } from "./App";
-import { builder } from "./util/builder";
+import { builder, BundleOptions } from "./util/builder";
 import { Permissions, attachPermissionsToRole } from "./util/permission";
 
 // A map of supported runtimes and esbuild targets
@@ -68,6 +68,11 @@ export interface FunctionProps extends Omit<lambda.FunctionOptions, "timeout"> {
    * @default - Defaults to true
    */
   readonly bundle?: boolean;
+
+  /**
+   * Additional bundling options
+   */
+  readonly bundleOptions?: BundleOptions;
 }
 
 /**
@@ -97,7 +102,10 @@ export class Function extends lambda.Function {
     const tracing = props.tracing || lambda.Tracing.ACTIVE;
     const runtime = props.runtime || lambda.Runtime.NODEJS_12_X;
     const bundle = props.bundle === undefined ? true : props.bundle;
-
+    const bundleOptions: BundleOptions = {
+      nodeModules: [],
+      ...props.bundleOptions,
+    };
     // Validate handler
     if (!handler) {
       throw new Error(`No handler defined for the "${id}" Lambda function`);
@@ -137,6 +145,7 @@ export class Function extends lambda.Function {
     } else {
       const { outZip, outHandler } = builder({
         bundle,
+        bundleOptions,
         srcPath,
         handler,
         target: esbuildTarget,

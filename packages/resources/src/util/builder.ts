@@ -9,8 +9,30 @@ interface BuilderProps {
   readonly srcPath: string;
   readonly handler: string;
   readonly bundle: boolean;
+  readonly bundleOptions: BundleOptions;
   readonly buildDir: string;
 }
+
+export type BundleOptions = {
+  /**
+   * A list of modules that should be installed instead of bundled. Modules are
+   * installed in a Lambda compatible environment only when bundling runs in
+   * Docker.
+   *
+   * @default - all modules are bundled
+   */
+  readonly nodeModules?: string[];
+
+  /**
+   * Command hooks
+   *
+   * @default - do not run additional commands
+   */
+  readonly commandHooks?: {
+    beforeBundling?: (inputDir: string, outputDir: string) => void;
+    afterBundling?: (inputDir: string, outputDir: string) => void;
+  };
+};
 
 interface BuilderOutput {
   readonly outZip: string;
@@ -28,9 +50,10 @@ export function getEsbuildMetafileName(handler: string): string {
 
 function getAllExternalsForHandler(
   srcPath: string,
-  bundle: boolean
+  bundle: boolean,
+  nodeModules: string[]
 ): Array<string> {
-  let externals = ["aws-sdk"];
+  let externals = ["aws-sdk", ...nodeModules];
 
   if (bundle) {
     return externals;
@@ -55,7 +78,14 @@ function getHandlerFullPosixPath(srcPath: string, handler: string): string {
 }
 
 export function builder(builderProps: BuilderProps): BuilderOutput {
-  const { target, bundle, srcPath, handler, buildDir } = builderProps;
+  const {
+    target,
+    bundle,
+    srcPath,
+    handler,
+    buildDir,
+    bundleOptions,
+  } = builderProps;
 
   console.log(
     chalk.grey(
@@ -131,9 +161,15 @@ export function builder(builderProps: BuilderProps): BuilderOutput {
     buildDir,
     getEsbuildMetafileName(handler)
   );
-  const external = getAllExternalsForHandler(srcPath, bundle);
+  const external = getAllExternalsForHandler(
+    srcPath,
+    bundle,
+    bundleOptions.nodeModules || []
+  );
 
+  bundleOptions?.commandHooks?.beforeBundling?.(entryPath, buildPath);
   transpile(entryPath);
+  bundleOptions?.commandHooks?.afterBundling?.(entryPath, buildPath);
 
   let outZip, outHandler;
   if (bundle) {
